@@ -15,13 +15,20 @@ while True:
         continue
     # [1, 25, 1, 255] and [1, 25, 0, 255] are turning led on/off
     if (value[0] == 1) and (value[1] == 25):
-        # send the new led state right back
+        # set the led and send the new led state right back
         uart.write(value)
         if value[2] == 1:
             led.value(1)
         else:
             led.value(0)
         continue
+
+    # [3, 0, n, 255] is a monitoring packet, the pi expects it to be echoed back
+    if (value[0] == 3) and (value[1] == 0):
+        # echo the value back
+        uart.write(value)
+        continue
+
     # [5, 4, 0, 255] is a request for temperature
     if (value[0] == 5) and (value[1] == 4):
         reading = sensor_temp.read_u16()
