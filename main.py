@@ -1,5 +1,5 @@
 from machine import UART, Pin, ADC
-#hello
+
 led = Pin(25, Pin.OUT)
 led_state = False
 sensor_temp = ADC(4)
