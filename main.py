@@ -10,9 +10,12 @@ while True:
     if not uart.any():
         continue
     value = uart.read(4)
+    if len(value) != 4:
+        uart.read(1)
+        continue
     # all packets are of the 4 byte format [code, d1, d2, 255]
     if value[3] != 255:
-        # not synchronised, read on byte and continue
+        # not synchronised, read one byte and continue
         uart.read(1)
         continue
 
