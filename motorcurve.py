@@ -15,25 +15,43 @@ def tick(timer):
  
 tim.init(freq=10, mode=Timer.PERIODIC, callback=tick)
 
-
+# The default values in this class should be matched to the actual roof motors
 
 class DoorMotor():
 
-    def __init__(self, max_running_time=10):
+    def __init__(self, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.3):
+        """When self.run is called, sets a pmw ratio value between 0 and maximum for a given time since open or close were called,
+           the defaults above should be tailored to the actual door and H bridge used.
+           duration is the duration of the perod, after which the pmw value will be 'minimum'
+           fast_duration is the period where the value will be maximum
+           max_running_time is the full duration, after which, the value will be zero and the open/close will be considered complete
+           for example, if duration is 60, fast_duration is 40, max_running_time is 65
+           then, for t seconds 0 to 10 the ratio will climb from 0 to maximum,
+           then stay at maximum for t 10 to 50, (making 40 seconds of fast_duration)
+           and then ramp down to minimum for t 50 to 60
+           and 60 to 65 will stay at the minimum
+           and beyond 65 will be zero"""
+
         # status codes
         # 0 : unknown
         # 1 : open
         # 2 : opening
         # 3 : closed
         # 4 : closing
+
         self._status = 0
         self.start_running = 0
+        self.pwm = 0
+        self.fast_duration = fast_duration
+        self.duration = duration
         self.max_running_time = max_running_time
+        self.maximum = maximum
+        self.minimum = minimum
 
     def status(self):
-        """This would normally check limit switches, currently, if UNKNOWN, assume closed"""
+        """Returns a status code 0 to 4"""
         if not self._status:
-            # the door is unknown
+            # the door is unknown, ******** future, check limit switch, currently assume closed ****
             self._status = 3
         return self._status
 
@@ -44,7 +62,6 @@ class DoorMotor():
         # change status to opening
         self._status = 2
         self.start_running = _TICK
-
 
     def close(self):
         if self._status != 1:
@@ -59,6 +76,9 @@ class DoorMotor():
         if self._status != 2 and self._status != 4:
             # the motor is not running
             return
+
+        # check for limit switches here !!!!!!
+
         if _TICK > self.start_running:
             running_time = _TICK - self.start_running
         else:
@@ -67,17 +87,34 @@ class DoorMotor():
         # running time in tenths of a second, convert to seconds
         running_time = running_time/10.0
         # get pwm ratio
-        r = int(roofmotor(running_time)*65536)
-        # currently just print
-        print(r)
-        # this will be set into the pwm
-        if running_time > self.max_running_time:
+        if running_time >= self.max_running_time:
             if self._status == 2:
-                # the door is now open
+                # the door is now open   ##### confirm limit switch, if not set, should be unknown
                 self._status = 1
             if self._status == 4:
-                # the door is now closed
+                # the door is now closed   ##### confirm limit switch, if not set, should be unknown
                 self._status = 3
+            pwm = 0
+        else:
+            pwm = pwmratio(running_time, self.fast_duration, self.duration, self.minimum)
+        if pwm:
+            if running_time<self.duration/2.0:
+                # the start up, scale everything by maximum
+                pwm = pwm*self.maximum
+            else:
+                # the slow-down, scale 1 to maximum, but minimum stays as it is
+                m = (self.maximum-self.minimum)/(1-self.minimum)
+                pwm = m*pwm + self.maximum - m
+        pwm = int(pwm*65536)
+        # has this changed from previous?
+        if pwm == self.pwm:
+            # no change, so do nothing
+            return
+        # so the pwm ratio has changed
+        self.pwm = pwm
+        # set this onto the pwm pin
+
+
 
 
 def curve(t, duration, minimum=0.0):
@@ -168,41 +205,15 @@ def pwmratio(t, fast_duration, duration, minimum=0.0):
     return curve(t*scale, duration*scale, minimum)
 
 
-# The default values in this function should be matched to the actual roof motors
-
-def roofmotor(t, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.3):
-    """Returns a value between 0 and maximum for a given t, these defaults tailored to the
-       actual door and H bridge used.
-       duration is the duration of the perod, after which the value returned is 'minimum'
-       fast_duration is the period where the value returned will be maximum
-       max_running_time is the full duration, after which, the value returned will be zero
-       for example, if duration is 60, fast_duration is 40, max_running_time is 65
-       then, for t 0 to 10 the ratio will climb from 0 to maximum,
-       then stay at maximum for t 10 to 50, (making 40 seconds of fast_duration)
-       and then ramp down to minimum for t 50 to 60
-       and 60 to 65 will stay at the minimum
-       and beyond 65 will be zero"""
-    if t >= max_running_time:
-        return 0
-    ratio = pwmratio(t, fast_duration, duration, minimum)
-    if not ratio:
-        return ratio
-    if t<duration/2.0:
-        # the start up, scale everything by maximum
-        return ratio*maximum
-    else:
-        # the slow-down, scale 1 to maximum, but minimum stays as it is
-        m = (maximum-minimum)/(1-minimum)
-        return m*ratio + maximum - m
-
-
 
 if __name__ == "__main__":
-    # get the two doors
+    # get a door
     _DOOR0 = DoorMotor()
+    # open it
     _DOOR0.open()
     while True:
         # operate the doors
-       _DOOR0.run()
+        _DOOR0.run()
+        print(_DOOR0.pwm)
 
 
