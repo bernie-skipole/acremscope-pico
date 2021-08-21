@@ -62,6 +62,7 @@ class DoorMotor():
         # change status to opening
         self._status = 2
         self.start_running = _TICK
+        
 
     def close(self):
         if self._status != 1:
@@ -71,14 +72,20 @@ class DoorMotor():
         self._status = 4
         self.start_running = _TICK
 
-    def run(self, t):
+    def run(self):
         "Runs the motor"
         if self._status != 2 and self._status != 4:
             # the motor is not running
             return
 
         # check for limit switches here !!!!!!
-
+        
+        if _TICK == self.start_running:
+            # start the motor after the first _TICK
+            # since at time zero, the pwm ratio should be zero
+            # so return here, to give _TICK time to increment
+            return            
+ 
         if _TICK > self.start_running:
             running_time = _TICK - self.start_running
         else:
@@ -113,7 +120,7 @@ class DoorMotor():
         # so the pwm ratio has changed
         self.pwm = pwm
         # set this onto the pwm pin
-
+        #print(self._status,running_time,self.pwm)
 
 
 
@@ -209,11 +216,13 @@ def pwmratio(t, fast_duration, duration, minimum=0.0):
 if __name__ == "__main__":
     # get a door
     _DOOR0 = DoorMotor()
+    # check status
+    print(_DOOR0.status())
     # open it
     _DOOR0.open()
     while True:
         # operate the doors
         _DOOR0.run()
-        print(_DOOR0.pwm)
+ 
 
 

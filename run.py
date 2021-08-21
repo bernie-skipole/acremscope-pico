@@ -21,6 +21,7 @@ def read_uart():
     """Read an instruction from the Raspberry pi via UART
     Handle an LED request, temerature request, door status request
     Return None, or (code, d1, d2)"""
+    global led_state
     if not uart.any():
         return
     value = uart.read(4)
@@ -104,8 +105,8 @@ while True:
     # if door status has changed, report it back
     report_door_change()
     # operate the doors
-   _DOOR0.run()
-   _DOOR1.run()
+    _DOOR0.run()
+    _DOOR1.run()
     if rxd is None:
         # No further requests from the pi have been received, so loop back and check again
         continue
