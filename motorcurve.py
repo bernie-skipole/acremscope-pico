@@ -118,12 +118,22 @@ class DoorMotor():
             # Its opening, check for limit switch
             if not self.limit_open.value():
                 # Its low, so the limit_open switch is closed, putting a ground on the pin
+                # flage the door as opened
                 self._status = 1
                 self.pwm_ratio = 0
                 self.pwm.duty_u16(0)
                 return
 
-        # check for limit switches here !!!!!!
+        if self._status == 4:
+            # Its closing, check for limit switch
+            if not self.limit_close.value():
+                # Its low, so the limit_close switch is closed, putting a ground on the pin
+                # flag the door as closed
+                self._status = 3
+                self.pwm_ratio = 0
+                self.pwm.duty_u16(0)
+                return
+
         
         if _TICK == self.start_running:
             # start the motor after the first _TICK
