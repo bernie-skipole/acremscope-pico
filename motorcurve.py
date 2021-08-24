@@ -1,5 +1,5 @@
 
-from machine import Timer
+from machine import Timer, Pin, PWM
 
 # create a global counter
 _TICK = 0
@@ -19,7 +19,7 @@ tim.init(freq=10, mode=Timer.PERIODIC, callback=tick)
 
 class DoorMotor():
 
-    def __init__(self, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.3):
+    def __init__(self, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.3, **pins):
         """When self.run is called, sets a pmw ratio value between 0 and maximum for a given time since open or close were called,
            the defaults above should be tailored to the actual door and H bridge used.
            duration is the duration of the perod, after which the pmw value will be 'minimum'
@@ -41,18 +41,51 @@ class DoorMotor():
 
         self._status = 0
         self.start_running = 0
-        self.pwm = 0
+        self.pwm_ratio = 0
         self.fast_duration = fast_duration
         self.duration = duration
         self.max_running_time = max_running_time
         self.maximum = maximum
         self.minimum = minimum
 
+        # pins is a dictionary of pin functions to GPIO pin numbers, the functions should be:
+        # 'direction', 'pwm', 'limit_close', 'limit_open'
+
+        # set direction pin output
+        self.direction = Pin(pins['direction'], Pin.OUT)
+        self.direction.value(0)
+
+        # set pwm
+        self.pwm = PWM(pins['pwm'])
+        # Set the PWM frequency.
+        self.pwm.freq(1000)
+
+        # set limit pins
+        self.limit_close = Pin(pins['limit_close'], Pin.IN, Pin.PULL_UP)
+        self.limit_open = Pin(pins['limit_open'], Pin.IN, Pin.PULL_UP)
+        
+
+
     def status(self):
         """Returns a status code 0 to 4"""
         if not self._status:
-            # the door is unknown, ******** future, check limit switch, currently assume closed ****
-            self._status = 3
+            # the door is unknown
+            # is it open or closed?
+            if not self.limit_close.value():
+                # Its low, so the limit_close switch is closed, putting a ground on the pin
+                # set status  as closed
+                self._status = 3
+            elif not self.limit_open.value():
+                # Its low, so the limit_open switch is closed, putting a ground on the pin
+                # set status as open
+                self._status = 1
+            else:
+                # if still unknown, try a forced close
+                # change status to closing and run the motor
+                ######### flag a slow close   ######## still to do
+                self._status = 4
+                self.start_running = _TICK
+                self.direction.value(0)
         return self._status
 
     def open(self):
@@ -62,6 +95,7 @@ class DoorMotor():
         # change status to opening
         self._status = 2
         self.start_running = _TICK
+        self.direction.value(1)
         
 
     def close(self):
@@ -71,12 +105,23 @@ class DoorMotor():
         # change status to closing
         self._status = 4
         self.start_running = _TICK
+        self.direction.value(0)
+
 
     def run(self):
         "Runs the motor"
         if self._status != 2 and self._status != 4:
             # the motor is not running
             return
+
+        if self._status == 2:
+            # Its opening, check for limit switch
+            if not self.limit_open.value():
+                # Its low, so the limit_open switch is closed, putting a ground on the pin
+                self._status = 1
+                self.pwm_ratio = 0
+                self.pwm.duty_u16(0)
+                return
 
         # check for limit switches here !!!!!!
         
@@ -96,10 +141,10 @@ class DoorMotor():
         # get pwm ratio
         if running_time >= self.max_running_time:
             if self._status == 2:
-                # the door is now open   ##### confirm limit switch, if not set, should be unknown
+                # the door is now open   ##### confirm limit switch, if not set, an alert is needed
                 self._status = 1
             if self._status == 4:
-                # the door is now closed   ##### confirm limit switch, if not set, should be unknown
+                # the door is now closed   ##### confirm limit switch, if not set, an alert is needed
                 self._status = 3
             pwm = 0
         else:
@@ -114,13 +159,16 @@ class DoorMotor():
                 pwm = m*pwm + self.maximum - m
         pwm = int(pwm*65536)
         # has this changed from previous?
-        if pwm == self.pwm:
+        if pwm == self.pwm_ratio:
             # no change, so do nothing
             return
-        # so the pwm ratio has changed
-        self.pwm = pwm
-        # set this onto the pwm pin
-        #print(self._status,running_time,self.pwm)
+        # so the pwm ratio has changed, set this onto the pwm pin
+        self.pwm_ratio = pwm
+        self.pwm.duty_u16(self.pwm_ratio)
+
+        # print(self._status,running_time,self.pwm_ratio)
+
+
 
 
 

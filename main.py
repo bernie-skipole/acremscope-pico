@@ -9,8 +9,11 @@ sensor_temp = ADC(4)
 uart = UART(0,baudrate=115200,tx=Pin(0),rx=Pin(1),bits=8,parity=None,stop=1)
 
 # get the two doors
-_DOOR0 = motorcurve.DoorMotor()
-_DOOR1 = motorcurve.DoorMotor()
+
+pins0 = {'direction':?, 'pwm':?, 'limit_close':?, 'limit_open':}
+
+_DOOR0 = motorcurve.DoorMotor( direction=?, pwm=?, limit_close=?, limit_open=? )
+_DOOR1 = motorcurve.DoorMotor( direction=?, pwm=?, limit_close=?, limit_open=? )
 
 # start with both doors in an uknown status
 _DOOR0_STATUS = 0
