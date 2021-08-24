@@ -72,6 +72,7 @@ def read_uart():
         return
 
     # [6, 1, N, 255] is a request for status for door number N, where N is 0 or 1
+    # return the door status code
     if (value[0] == 6) and (value[1] == 1):
         # create data of [7,N,code,255]
         if value[2]:

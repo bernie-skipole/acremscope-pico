@@ -33,11 +33,13 @@ class DoorMotor():
            and beyond 65 will be zero"""
 
         # status codes
-        # 0 : unknown
+        # 0 : unknown - initial start up value
         # 1 : open
         # 2 : opening
         # 3 : closed
         # 4 : closing
+        # 5 : Error - believed open, but limit switch has not closed
+        # 6 : Error - believed closed, but limit switch has not closed
 
         self._status = 0
         self.start_running = 0
@@ -47,6 +49,10 @@ class DoorMotor():
         self.max_running_time = max_running_time
         self.maximum = maximum
         self.minimum = minimum
+
+        # The slow_close is set True when the door is being closed from an unknown position,
+        # if True it sets the maximum speed to minimum + 0.01, ie just above minimum
+        self.slow_close = False
 
         # pins is a dictionary of pin functions to GPIO pin numbers, the functions should be:
         # 'direction', 'pwm', 'limit_close', 'limit_open'
@@ -63,26 +69,33 @@ class DoorMotor():
         # set limit pins
         self.limit_close = Pin(pins['limit_close'], Pin.IN, Pin.PULL_UP)
         self.limit_open = Pin(pins['limit_open'], Pin.IN, Pin.PULL_UP)
+
+        # call status function, to set the self._status value, and initiate a slow_close if necessary
+        # as the door may be left partially open if power is lost.
+        self.status()
+
         
 
 
     def status(self):
-        """Returns a status code 0 to 4"""
+        """Returns a status code 1 to 6"""
         if not self._status:
             # the door is unknown
             # is it open or closed?
             if not self.limit_close.value():
                 # Its low, so the limit_close switch is closed, putting a ground on the pin
                 # set status  as closed
+                self.slow_close = False
                 self._status = 3
             elif not self.limit_open.value():
                 # Its low, so the limit_open switch is closed, putting a ground on the pin
                 # set status as open
+                self.slow_close = False
                 self._status = 1
             else:
                 # if still unknown, try a forced close
-                # change status to closing and run the motor
-                ######### flag a slow close   ######## still to do
+                # change status to closing and run the motor slowly
+                self.slow_close = True
                 self._status = 4
                 self.start_running = _TICK
                 self.direction.value(0)
@@ -118,7 +131,8 @@ class DoorMotor():
             # Its opening, check for limit switch
             if not self.limit_open.value():
                 # Its low, so the limit_open switch is closed, putting a ground on the pin
-                # flage the door as opened
+                # flag the door as opened
+                self.slow_close = False
                 self._status = 1
                 self.pwm_ratio = 0
                 self.pwm.duty_u16(0)
@@ -129,6 +143,7 @@ class DoorMotor():
             if not self.limit_close.value():
                 # Its low, so the limit_close switch is closed, putting a ground on the pin
                 # flag the door as closed
+                self.slow_close = False
                 self._status = 3
                 self.pwm_ratio = 0
                 self.pwm.duty_u16(0)
@@ -149,28 +164,56 @@ class DoorMotor():
         # running time in tenths of a second, convert to seconds
         running_time = running_time/10.0
         # get pwm ratio
+
+
+        # If the running time is greater than max allowed, somthing is possibly wrong
+        # so stop the motor
         if running_time >= self.max_running_time:
             if self._status == 2:
-                # the door is now open   ##### confirm limit switch, if not set, an alert is needed
+                # was opening, so assume the door is now open 
                 self._status = 1
+                # confirm limit switch, if not set, an alert is needed
+                if self.limit_open.value():
+                    # Its high, so the limit_open switch is still open
+                    # flag an error
+                    self._status = 5
+                else:
+                    # Its low, limit_open switch is closed, all ok
+                    self.slow_close = False
             if self._status == 4:
-                # the door is now closed   ##### confirm limit switch, if not set, an alert is needed
+                # was closing, so assume the door is now closed
                 self._status = 3
+                # confirm limit switch, if not set, an alert is needed
+                if self.limit_close.value():
+                    # Its high, so the limit_close switch is still open
+                    # flag an error
+                    self._status = 6
+                else:
+                    # Its low, limit_close switch is closed, all ok
+                    self.slow_close = False
+            # and stop the motor
             pwm = 0
         else:
+            # door is still opening or closing, get the pwm ratio
             pwm = pwmratio(running_time, self.fast_duration, self.duration, self.minimum)
         if pwm:
-            if running_time<self.duration/2.0:
-                # the start up, scale everything by maximum
-                pwm = pwm*self.maximum
+            # pwm is a number between 0 and 1, reduce the value so instead of 1 the maximum ratio is given
+            if self.slow_close:
+                # As a 'slow close' is requested, the maximum speed is set to just above minimum
+                maxratio = self.minimum + 0.01
             else:
-                # the slow-down, scale 1 to maximum, but minimum stays as it is
-                m = (self.maximum-self.minimum)/(1-self.minimum)
-                pwm = m*pwm + self.maximum - m
+                maxratio = self.maximum
+            if running_time<self.duration/2.0:
+                # the start up, scale everything by maxratio, so 1 -> maxratio
+                pwm = pwm*maxratio
+            else:
+                # the slow-down, scale 1 to be maxratio, but minimum stays as it is
+                m = (maxratio-self.minimum)/(1-self.minimum)
+                pwm = m*pwm + maxratio - m
         pwm = int(pwm*65536)
         # has this changed from previous?
         if pwm == self.pwm_ratio:
-            # no change, so do nothing
+            # no change from the last time run was called, no need to apply this to the pwm pin
             return
         # so the pwm ratio has changed, set this onto the pwm pin
         self.pwm_ratio = pwm
@@ -272,15 +315,28 @@ def pwmratio(t, fast_duration, duration, minimum=0.0):
 
 
 if __name__ == "__main__":
+
+    codes = { 1 : "open",
+              2 : "opening",
+              3 : "closed",
+              4 : "closing",
+              5 : "Error - believed open, but limit switch has not closed",
+              6 : "Error - believed closed, but limit switch has not closed" }
+
     # get a door
     _DOOR0 = DoorMotor()
-    # check status
-    print(_DOOR0.status())
     # open it
     _DOOR0.open()
     while True:
         # operate the doors
         _DOOR0.run()
+        STATUS = _DOOR0.status()
+        print(codes[STATUS], _DOOR0.pwm_ratio)
+        if STATUS in [1, 3, 5, 6]:
+            # should be stopped
+            break
+
+        
  
 
 
