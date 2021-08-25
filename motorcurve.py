@@ -62,7 +62,7 @@ class DoorMotor():
         self.direction.value(0)
 
         # set pwm
-        self.pwm = PWM(pins['pwm'])
+        self.pwm = PWM(Pin(pins['pwm']))
         # Set the PWM frequency.
         self.pwm.freq(1000)
 
@@ -218,11 +218,6 @@ class DoorMotor():
         # so the pwm ratio has changed, set this onto the pwm pin
         self.pwm_ratio = pwm
         self.pwm.duty_u16(self.pwm_ratio)
-
-        # print(self._status,running_time,self.pwm_ratio)
-
-
-
 
 
 def curve(t, duration, minimum=0.0):
