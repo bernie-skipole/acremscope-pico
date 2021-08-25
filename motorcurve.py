@@ -324,7 +324,7 @@ if __name__ == "__main__":
               6 : "Error - believed closed, but limit switch has not closed" }
 
     # get a door
-    _DOOR0 = DoorMotor()
+    _DOOR0 = DoorMotor( direction=14, pwm=15, limit_close=12, limit_open=13 )
     # open it
     _DOOR0.open()
     while True:
