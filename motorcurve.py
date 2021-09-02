@@ -99,6 +99,14 @@ class DoorMotor():
                 self._status = 4
                 self.start_running = _TICK
                 self.direction.value(0)
+
+        ######## test lines
+        if self._status == 6:
+            self._status = 3
+        if self._status == 5:
+            self._status = 1
+        ######################### remove above to enable limit switches
+
         return self._status
 
     def open(self):
