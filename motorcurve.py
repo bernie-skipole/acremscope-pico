@@ -40,6 +40,7 @@ class DoorMotor():
         # 4 : closing
         # 5 : Error - believed open, but limit switch has not closed
         # 6 : Error - believed closed, but limit switch has not closed
+        # 7 : Error - both limit switches are closed
 
         self._status = 0
         self.start_running = 0
@@ -78,9 +79,10 @@ class DoorMotor():
 
 
     def status(self):
-        """Returns a status code 1 to 6"""
+        """Returns a status code 1 to 7"""
+
         if not self._status:
-            # the door is unknown
+            # status is zero, the door is unknown
             # is it open or closed?
             if not self.limit_close.value():
                 # Its low, so the limit_close switch is closed, putting a ground on the pin
@@ -100,6 +102,7 @@ class DoorMotor():
                 self.start_running = _TICK
                 self.direction.value(0)
 
+
         ######## test lines
         if self._status == 6:
             self._status = 3
@@ -108,6 +111,13 @@ class DoorMotor():
         ######################### remove above to enable limit switches
 
         return self._status
+
+    def checkbothlimits(self):
+        "Returns True if both limit sitches are closed, which is an invalid state"
+        if self.limit_open.value() or self.limit_close.value():
+            # one is open
+            return False
+        return True
 
     def open(self):
         if self._status != 3:
@@ -133,6 +143,14 @@ class DoorMotor():
         "Runs the motor"
         if self._status != 2 and self._status != 4:
             # the motor is not running
+            return
+
+        if self.checkbothlimits():
+            # both limit switches are closed, invalid value, stop the door
+            self.slow_close = False
+            self._status = 7
+            self.pwm_ratio = 0
+            self.pwm.duty_u16(0)
             return
 
         if self._status == 2:
@@ -324,7 +342,8 @@ if __name__ == "__main__":
               3 : "closed",
               4 : "closing",
               5 : "Error - believed open, but limit switch has not closed",
-              6 : "Error - believed closed, but limit switch has not closed" }
+              6 : "Error - believed closed, but limit switch has not closed",
+              7 : "Error - both limit switches are closed" }
 
     # get a door
     _DOOR0 = DoorMotor( direction=14, pwm=15, limit_close=12, limit_open=13 )
@@ -335,7 +354,7 @@ if __name__ == "__main__":
         _DOOR0.run()
         STATUS = _DOOR0.status()
         print(codes[STATUS], _DOOR0.pwm_ratio)
-        if STATUS in [1, 3, 5, 6]:
+        if STATUS in [1, 3, 5, 6, 7]:
             # should be stopped
             break
 
