@@ -1,4 +1,7 @@
 
+
+import os
+
 from machine import Timer, Pin, PWM
 
 # create a global counter
@@ -19,11 +22,13 @@ tim.init(freq=10, mode=Timer.PERIODIC, callback=tick)
 
 class DoorMotor():
 
-    def __init__(self, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.3, **pins):
+    door_parameters = "doorparameters.txt"
+
+    def __init__(self, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.05, **pins):
         """When self.run is called, sets a pmw ratio value between 0 and maximum for a given time since open or close were called,
            the defaults above should be tailored to the actual door and H bridge used.
            duration is the duration of the perod, after which the pmw value will be 'minimum'
-           fast_duration is the period where the value will be maximum
+           fast_duration is the period where the pmw value will be maximum
            max_running_time is the full duration, after which, the value will be zero and the open/close will be considered complete
            for example, if duration is 60, fast_duration is 40, max_running_time is 65
            then, for t seconds 0 to 10 the ratio will climb from 0 to maximum,
@@ -31,6 +36,24 @@ class DoorMotor():
            and then ramp down to minimum for t 50 to 60
            and 60 to 65 will stay at the minimum
            and beyond 65 will be zero"""
+
+        # pins is a dictionary of pin functions to GPIO pin numbers, the functions should be:
+        # 'direction', 'pwm', 'limit_close', 'limit_open'
+
+        # set direction pin output
+        self.direction = Pin(pins['direction'], Pin.OUT)
+        self.direction.value(0)
+
+        # set pwm, with frequency 500, duty 0 to ensure it starts stopped
+        self.pwm = PWM(Pin(pins['pwm']))
+        # Set the PWM frequency.
+        self.pwm.freq(500)
+        # ensure the motor is stopped
+        self.pwm.duty_u16(0)
+
+        # set limit pins
+        self.limit_close = Pin(pins['limit_close'], Pin.IN, Pin.PULL_UP)
+        self.limit_open = Pin(pins['limit_open'], Pin.IN, Pin.PULL_UP)
 
         # status codes
         # 0 : unknown - initial start up value
@@ -45,38 +68,115 @@ class DoorMotor():
         self._status = 0
         self.start_running = 0
         self.pwm_ratio = 0
-        self.fast_duration = fast_duration
-        self.duration = duration
-        self.max_running_time = max_running_time
-        self.maximum = maximum
-        self.minimum = minimum
 
         # The slow_close is set True when the door is being closed from an unknown position,
         # if True it sets the maximum speed to minimum + 0.01, ie just above minimum
         self.slow_close = False
 
-        # pins is a dictionary of pin functions to GPIO pin numbers, the functions should be:
-        # 'direction', 'pwm', 'limit_close', 'limit_open'
+        # Set these parameters to default
+        self._fast_duration = fast_duration
+        self._duration = duration
+        self._max_running_time = max_running_time
+        self._maximum = maximum
+        self._minimum = minimum
 
-        # set direction pin output
-        self.direction = Pin(pins['direction'], Pin.OUT)
-        self.direction.value(0)
+        # If new values have been set in a file, read them
+        self.read_parameters()
 
-        # set pwm
-        self.pwm = PWM(Pin(pins['pwm']))
-        # Set the PWM frequency.
-        self.pwm.freq(1000)
 
-        # set limit pins
-        self.limit_close = Pin(pins['limit_close'], Pin.IN, Pin.PULL_UP)
-        self.limit_open = Pin(pins['limit_open'], Pin.IN, Pin.PULL_UP)
+    def read_parameters(self):
+        """Reads the parameters from a file"""
+        if not os.path.isfile(self.door_parameters):
+            return
+        f = open(self.door_parameters, "r")
+        parameter_strings = f.readlines()
+        f.close()
+        if len(parameter_strings) != 5:
+            return
+        parameter_list = [ int(p.strip()) for p in parameter_strings]
+        self._fast_duration = parameter_list[0]
+        self._duration = parameter_list[1]
+        self._max_running_time = parameter_list[2]
+        self._maximum = parameter_list[3]/100
+        self._minimum = parameter_list[4]/100
 
-        # call status function, to set the self._status value, and initiate a slow_close if necessary
-        # as the door may be left partially open if power is lost.
-        self.status()
 
-        
+    def write_parameters(self):
+        """Saves the parameters to a file"""
+        f = open(self.door_parameters, "w")
+        parameter_list = [self._fast_duration, self._duration, self._max_running_time, int(self._maximum*100), int(self._minimum*100)]
+        f.writelines(str(p)+"\n" for p in parameter_list)
+        f.close()
 
+    @property
+    def fast_duration(self):
+        return self._fast_duration
+
+    @fast_duration.setter
+    def fast_duration(self, value):
+        "Set fast_duration, and adjust other values to be greater"
+        if self._max_running_time <= value:
+            self._max_running_time = value + 2
+        if self._duration <= value:
+            self._duration = value + 1
+        self._fast_duration = value
+        self.write_parameters()
+
+
+    @property
+    def duration(self):
+        return self._duration
+
+    @duration.setter
+    def duration(self, value):
+        "Set duration, and adjust other values"
+        if self._max_running_time <= value:
+            self._max_running_time = value + 1
+        self._duration = value
+        if self._fast_duration >= value:
+            self._fast_duration =  value-1
+        self.write_parameters()
+
+    @property
+    def max_running_time(self):
+        return self._max_running_time
+
+    @max_running_time.setter
+    def max_running_time(self, value):
+        "Set max_running_time, and adjust other values"
+        self._max_running_time = value
+        if self._duration >= value:
+            self._duration = value - 1
+        if self._fast_duration >= self._duration:
+            self._fast_duration =  self._duration-1
+        self.write_parameters()
+
+    @property
+    def maximum(self):
+        return self._maximum
+
+    @maximum.setter
+    def maximum(self, value):
+        "Set maximum"
+        if self._minimum >= value:
+            self._minimum = value - 0.01
+        self._maximum = value
+        self.write_parameters()
+
+    @property
+    def minimum(self):
+        return self._minimum
+
+    @minimum.setter
+    def minimum(self, value):
+        "Set minimum"
+        if value > 0.9:
+            self._minimum = 0.9
+        else:
+            self._minimum = value
+        if self._maximum <= value:
+            self._maximum = value+0.05
+        self.write_parameters()
 
     def status(self):
         """Returns a status code 1 to 7"""
@@ -194,7 +294,7 @@ class DoorMotor():
 
         # If the running time is greater than max allowed, somthing is possibly wrong
         # so stop the motor
-        if running_time >= self.max_running_time:
+        if running_time >= self._max_running_time:
             if self._status == 2:
                 # was opening, so assume the door is now open 
                 self._status = 1
@@ -221,20 +321,23 @@ class DoorMotor():
             pwm = 0
         else:
             # door is still opening or closing, get the pwm ratio
-            pwm = pwmratio(running_time, self.fast_duration, self.duration, self.minimum)
+            pwm = pwmratio(running_time, self._fast_duration, self._duration, self._minimum)
         if pwm:
             # pwm is a number between 0 and 1, reduce the value so instead of 1 the maximum ratio is given
             if self.slow_close:
                 # As a 'slow close' is requested, the maximum speed is set to just above minimum
-                maxratio = self.minimum + 0.01
+                #maxratio = self._minimum + 0.01
+                ###########################################
+                # initially, until limit switches are working, ignore slow_close instruction
+                maxratio = self._maximum
             else:
-                maxratio = self.maximum
-            if running_time<self.duration/2.0:
+                maxratio = self._maximum
+            if running_time<self._duration/2.0:
                 # the start up, scale everything by maxratio, so 1 -> maxratio
                 pwm = pwm*maxratio
             else:
                 # the slow-down, scale 1 to be maxratio, but minimum stays as it is
-                m = (maxratio-self.minimum)/(1-self.minimum)
+                m = (maxratio-self._minimum)/(1-self._minimum)
                 pwm = m*pwm + maxratio - m
         pwm = int(pwm*65536)
         # has this changed from previous?
