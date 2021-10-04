@@ -158,9 +158,14 @@ class DoorMotor():
     @maximum.setter
     def maximum(self, value):
         "Set maximum"
-        if self._minimum >= value:
-            self._minimum = value - 0.01
-        self._maximum = value
+        if value > 0.95:
+            self._maximum = 0.95
+        elif value < 0.02:
+            self._maximum = 0.02
+        else:
+            self._maximum = value
+        if self._minimum >= self._maximum:
+            self._minimum = self._maximum - 0.01
         self.write_parameters()
 
     @property
@@ -170,12 +175,14 @@ class DoorMotor():
     @minimum.setter
     def minimum(self, value):
         "Set minimum"
-        if value > 0.9:
-            self._minimum = 0.9
+        if value <= 0:
+            self._minimum = 0.01
+        elif value > 0.5:
+            self._minimum = 0.5
         else:
             self._minimum = value
-        if self._maximum <= value:
-            self._maximum = value+0.05
+        if self._maximum <= self._minimum:
+            self._maximum = self._minimum+0.01
         self.write_parameters()
 
     def status(self):

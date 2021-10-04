@@ -160,9 +160,6 @@ while True:
                 _DOOR1.open()
         continue
 
-
-    # fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.05
-
     # [10 for door 0
     if code == 10:
         if d1 == 1:
