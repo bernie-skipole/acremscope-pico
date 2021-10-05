@@ -88,7 +88,7 @@ class DoorMotor():
 
     def read_parameters(self):
         """Reads the parameters from a file"""
-        if not os.path.isfile(self.name):
+        if self.name not in os.listdir():
             return
         f = open(self.name, "r")
         parameter_strings = f.readlines()
@@ -107,7 +107,8 @@ class DoorMotor():
         """Saves the parameters to a file"""
         f = open(self.name, "w")
         parameter_list = [self._fast_duration, self._duration, self._max_running_time, int(self._maximum*100), int(self._minimum*100)]
-        f.writelines(str(p)+"\n" for p in parameter_list)
+        for p in parameter_list:
+            f.write(str(p)+"\n")
         f.close()
 
     @property
@@ -460,8 +461,8 @@ if __name__ == "__main__":
     # get a door
     _DOOR0 = DoorMotor( "Left", direction=14, pwm=15, limit_close=12, limit_open=13 )
     # open it
-    print("OPEN")
-    _DOOR0.open()
+    print("CLOSE")
+    _DOOR0.close()
     while True:
         # operate the doors
         _DOOR0.run()
@@ -472,9 +473,8 @@ if __name__ == "__main__":
             break
     print("Changing max running time to 15")
     _DOOR0.max_running_time = 15
-    # close it
-    print("CLOSE")
-    _DOOR0.close()
+    print("OPEN")
+    _DOOR0.open()
     while True:
         # operate the doors
         _DOOR0.run()

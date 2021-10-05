@@ -79,7 +79,7 @@ while True:
     if code == 1:
         if d1 == 25:
             # set the led and send the new led state right back
-             if d2 == 1:
+            if d2 == 1:
                 led.value(1)
                 led_state = True
                 write_uart(1, 25, 1)
