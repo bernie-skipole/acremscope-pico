@@ -4,8 +4,8 @@ import motorcurve
 
 # set up the two doors, with the appropriate pico pins
 
-_DOOR0 = motorcurve.DoorMotor( direction=14, pwm=15, limit_close=12, limit_open=13 )
-_DOOR1 = motorcurve.DoorMotor( direction=17, pwm=16, limit_close=19, limit_open=18 )
+_DOOR0 = motorcurve.DoorMotor( "Left", direction=14, pwm=15, limit_close=12, limit_open=13 )
+_DOOR1 = motorcurve.DoorMotor( "Right", direction=17, pwm=16, limit_close=19, limit_open=18 )
 
 led = Pin(25, Pin.OUT)
 led_state = False

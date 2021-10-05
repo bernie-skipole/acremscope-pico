@@ -22,9 +22,8 @@ tim.init(freq=10, mode=Timer.PERIODIC, callback=tick)
 
 class DoorMotor():
 
-    door_parameters = "doorparameters.txt"
 
-    def __init__(self, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.05, **pins):
+    def __init__(self, name, fast_duration=4, duration=8, max_running_time=10, maximum=0.95, minimum=0.05, **pins):
         """When self.run is called, sets a pmw ratio value between 0 and maximum for a given time since open or close were called,
            the defaults above should be tailored to the actual door and H bridge used.
            duration is the duration of the perod, after which the pmw value will be 'minimum'
@@ -36,6 +35,9 @@ class DoorMotor():
            and then ramp down to minimum for t 50 to 60
            and 60 to 65 will stay at the minimum
            and beyond 65 will be zero"""
+
+        self.name = name
+        # this name is used as the file name where door parameters will be saved
 
         # pins is a dictionary of pin functions to GPIO pin numbers, the functions should be:
         # 'direction', 'pwm', 'limit_close', 'limit_open'
@@ -86,9 +88,9 @@ class DoorMotor():
 
     def read_parameters(self):
         """Reads the parameters from a file"""
-        if not os.path.isfile(self.door_parameters):
+        if not os.path.isfile(self.name):
             return
-        f = open(self.door_parameters, "r")
+        f = open(self.name, "r")
         parameter_strings = f.readlines()
         f.close()
         if len(parameter_strings) != 5:
@@ -103,7 +105,7 @@ class DoorMotor():
 
     def write_parameters(self):
         """Saves the parameters to a file"""
-        f = open(self.door_parameters, "w")
+        f = open(self.name, "w")
         parameter_list = [self._fast_duration, self._duration, self._max_running_time, int(self._maximum*100), int(self._minimum*100)]
         f.writelines(str(p)+"\n" for p in parameter_list)
         f.close()
@@ -456,9 +458,23 @@ if __name__ == "__main__":
               7 : "Error - both limit switches are closed" }
 
     # get a door
-    _DOOR0 = DoorMotor( direction=14, pwm=15, limit_close=12, limit_open=13 )
+    _DOOR0 = DoorMotor( "Left", direction=14, pwm=15, limit_close=12, limit_open=13 )
     # open it
+    print("OPEN")
     _DOOR0.open()
+    while True:
+        # operate the doors
+        _DOOR0.run()
+        STATUS = _DOOR0.status()
+        print(codes[STATUS], _DOOR0.pwm_ratio)
+        if STATUS in [1, 3, 5, 6, 7]:
+            # should be stopped
+            break
+    print("Changing max running time to 15")
+    _DOOR0.max_running_time = 15
+    # close it
+    print("CLOSE")
+    _DOOR0.close()
     while True:
         # operate the doors
         _DOOR0.run()
