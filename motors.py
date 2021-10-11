@@ -1,11 +1,13 @@
 
 
-from machine import Timer, Pin, PWM
+from machine import Pin, PWM
+
+import time
 
 class Motor():
 
     def __init__(self, name, direction, pwm, limit_close, limit_open):
-        "The arguments are the pico pins"
+        "name is for possile debugging, other arguments are the pico pins"
 
         self.name = name
 
@@ -14,7 +16,6 @@ class Motor():
         self.direction_pin.value(0)
         self._direction = 0
         
-
         # set pwm, with frequency 500, duty 0 to ensure it starts stopped
         self.pwm = PWM(pwm)
         # Set the PWM frequency.
@@ -27,12 +28,9 @@ class Motor():
         self.limit_close = Pin(limit_close, Pin.IN, Pin.PULL_UP)
         self.limit_open = Pin(limit_open, Pin.IN, Pin.PULL_UP)
 
-    def checkbothlimits(self):
-        "Returns True if both limit sitches are closed, which is an invalid state"
-        if self.limit_open.value() or self.limit_close.value():
-            # one is open
-            return False
-        return True
+        # An attribute to hold a millisecond time value, used to ensure door does not run continuously
+        self.start_time = None
+
 
     @property
     def pwm_ratio(self):
@@ -61,7 +59,19 @@ class Motor():
         self._direction = 0
 
     def checklimits(self):
-        "If limit switch demands a stop, set pwm to zero and return a True"
+        "If limit switch, or door timer, demands a stop, set pwm to zero and return a True"
+        # set self.start_time if door has started moving
+        self.start_timer()
+
+        if self.start_time is not None:
+            # door is running
+            delta = time.ticks_diff(time.ticks_ms(), self.start_time) # compute time difference, which is current running time
+            if delta >= 120000:
+                # running time is greater than 120 seconds, ie two minutes. So stop the door
+                self._pwm_ratio = 0
+                self.pwm.duty_u16(0)
+                return True
+
         if self._direction and (not self.limit_open.value()):   # openning, but limit_open is low, so switch closed
             self._pwm_ratio = 0
             self.pwm.duty_u16(0)
@@ -73,6 +83,15 @@ class Motor():
             return True
 
         return False
+
+    def start_timer(self):
+        if self._pwm_ratio == 0:
+            # door stopped, reset timer
+            self.start_time = None
+        elif self.start_time is None:
+            # pwm_ratio has been set, but not self.running_time
+            self.start_time = time.ticks_ms() # get millisecond counter
+            # self.start_time now stays at this untill self._pwm_ratio becomes zero
 
 
 

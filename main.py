@@ -1,4 +1,4 @@
-from machine import UART, Pin, ADC, Timer
+from machine import UART, Pin, ADC
 
 import motors
 
