@@ -17,7 +17,7 @@ class Motor():
         self._direction = 0
         
         # set pwm, with frequency 500, duty 0 to ensure it starts stopped
-        self.pwm = PWM(pwm)
+        self.pwm = PWM(Pin(pwm))
         # Set the PWM frequency.
         self.pwm.freq(500)
         # ensure the motor is stopped
